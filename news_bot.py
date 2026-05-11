@@ -15,6 +15,7 @@ import yaml
 
 DEFAULT_CONFIG_PATH = "sources.yaml"
 DEFAULT_MODEL = "gpt-5-mini"
+TELEGRAM_MESSAGE_LIMIT = 4096
 
 
 class TextExtractor(HTMLParser):
@@ -166,17 +167,46 @@ def generate_digest(entries: list[dict[str, str]], api_key: str, model: str) -> 
     return text or build_fallback_digest(entries)
 
 
+def split_telegram_message(text: str, limit: int = TELEGRAM_MESSAGE_LIMIT) -> list[str]:
+    if len(text) <= limit:
+        return [text]
+
+    chunks: list[str] = []
+    current = ""
+    for line in text.splitlines(keepends=True):
+        if len(line) > limit:
+            if current:
+                chunks.append(current.rstrip())
+                current = ""
+            chunks.extend(line[index : index + limit] for index in range(0, len(line), limit))
+            continue
+
+        if len(current) + len(line) > limit:
+            chunks.append(current.rstrip())
+            current = line
+        else:
+            current += line
+
+    if current:
+        chunks.append(current.rstrip())
+    return chunks
+
+
 def send_telegram_message(bot_token: str, chat_id: str, text: str) -> None:
-    response = requests.post(
-        f"https://api.telegram.org/bot{bot_token}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": text,
-            "disable_web_page_preview": True,
-        },
-        timeout=30,
-    )
-    response.raise_for_status()
+    for chunk in split_telegram_message(text):
+        response = requests.post(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            json={
+                "chat_id": chat_id,
+                "text": chunk,
+                "disable_web_page_preview": True,
+            },
+            timeout=30,
+        )
+        if not response.ok:
+            raise RuntimeError(
+                f"Telegram sendMessage failed with {response.status_code}: {response.text}"
+            )
 
 
 def run(config_path: str, dry_run: bool = False) -> str:

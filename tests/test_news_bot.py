@@ -1,7 +1,14 @@
 import unittest
+from unittest.mock import Mock, patch
 
 
-from news_bot import build_fallback_digest, filter_entries, strip_markup
+from news_bot import (
+    build_fallback_digest,
+    filter_entries,
+    send_telegram_message,
+    split_telegram_message,
+    strip_markup,
+)
 
 
 class NewsBotTest(unittest.TestCase):
@@ -92,6 +99,26 @@ class NewsBotTest(unittest.TestCase):
         text = strip_markup("<p>Agentic workflows &amp; coding tools.</p>")
 
         self.assertEqual(text, "Agentic workflows & coding tools.")
+
+    def test_split_telegram_message_keeps_chunks_under_limit(self):
+        message = "标题\n\n" + "\n".join(f"{index}. {'x' * 900}" for index in range(1, 7))
+
+        chunks = split_telegram_message(message, limit=1000)
+
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(len(chunk) <= 1000 for chunk in chunks))
+        self.assertEqual("".join(chunks).replace("\n\n", "\n").count("1."), 1)
+
+    @patch("news_bot.requests.post")
+    def test_send_telegram_message_includes_response_body_on_failure(self, mock_post):
+        response = Mock()
+        response.ok = False
+        response.status_code = 400
+        response.text = '{"ok":false,"description":"Bad Request: chat not found"}'
+        mock_post.return_value = response
+
+        with self.assertRaisesRegex(RuntimeError, "chat not found"):
+            send_telegram_message("token", "bad-chat-id", "hello")
 
 
 if __name__ == "__main__":
