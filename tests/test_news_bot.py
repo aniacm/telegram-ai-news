@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from news_bot import (
     build_fallback_digest,
+    build_openai_request_payload,
     filter_entries,
     send_telegram_message,
     split_telegram_message,
@@ -78,6 +79,40 @@ class NewsBotTest(unittest.TestCase):
 
         self.assertEqual(result, [entries[1]])
 
+    def test_filter_entries_ignores_single_summary_keyword_from_boilerplate(self):
+        entries = [
+            {
+                "title": "Google DeepMind's powerful AI co-mathematician",
+                "summary": "Today's AI research update. Automate any manual task with Codex.",
+                "link": "https://example.com/deepmind",
+                "source": "The Rundown AI",
+            },
+            {
+                "title": "Agents for Everything Else: Codex for Knowledge Work",
+                "summary": "Coding agents are expanding from codebases to broader workflows.",
+                "link": "https://example.com/codex-agents",
+                "source": "Latent Space",
+            },
+        ]
+
+        result = filter_entries(entries, ["codex", "coding agent", "codebase"], max_items=5)
+
+        self.assertEqual(result, [entries[1]])
+
+    def test_filter_entries_keeps_summary_with_multiple_relevant_keywords(self):
+        entries = [
+            {
+                "title": "A new workflow for large teams",
+                "summary": "This coding agent reviews pull requests across large codebases.",
+                "link": "https://example.com/workflow",
+                "source": "Example",
+            },
+        ]
+
+        result = filter_entries(entries, ["coding agent", "pull request", "codebase"], max_items=5)
+
+        self.assertEqual(result, entries)
+
     def test_build_fallback_digest_formats_chinese_daily_message(self):
         entries = [
             {
@@ -99,6 +134,14 @@ class NewsBotTest(unittest.TestCase):
         text = strip_markup("<p>Agentic workflows &amp; coding tools.</p>")
 
         self.assertEqual(text, "Agentic workflows & coding tools.")
+
+    def test_build_openai_request_payload_allows_long_enough_digest(self):
+        payload = build_openai_request_payload(
+            [{"title": "Claude Code", "summary": "Prompt caching", "source": "Claude", "link": "x"}],
+            "gpt-5-mini",
+        )
+
+        self.assertGreaterEqual(payload["max_output_tokens"], 2200)
 
     def test_split_telegram_message_keeps_chunks_under_limit(self):
         message = "标题\n\n" + "\n".join(f"{index}. {'x' * 900}" for index in range(1, 7))

@@ -15,6 +15,7 @@ import yaml
 
 DEFAULT_CONFIG_PATH = "sources.yaml"
 DEFAULT_MODEL = "gpt-5-mini"
+OPENAI_MAX_OUTPUT_TOKENS = 2200
 TELEGRAM_MESSAGE_LIMIT = 4096
 
 
@@ -73,8 +74,7 @@ def filter_entries(
         if link and link in seen_links:
             continue
 
-        haystack = f"{entry.get('title', '')} {entry.get('summary', '')}".lower()
-        if not any(keyword_matches(keyword, haystack) for keyword in keywords):
+        if not is_relevant_entry(entry, keywords):
             continue
 
         if link:
@@ -85,6 +85,20 @@ def filter_entries(
             break
 
     return selected
+
+
+def is_relevant_entry(entry: dict[str, str], keywords: list[str]) -> bool:
+    title = entry.get("title", "").lower()
+    summary = entry.get("summary", "").lower()
+
+    if matched_keywords(keywords, title):
+        return True
+
+    return len(matched_keywords(keywords, summary)) >= 2
+
+
+def matched_keywords(keywords: list[str], haystack: str) -> set[str]:
+    return {keyword.lower() for keyword in keywords if keyword_matches(keyword, haystack)}
 
 
 def keyword_matches(keyword: str, haystack: str) -> bool:
@@ -155,16 +169,20 @@ def generate_digest(entries: list[dict[str, str]], api_key: str, model: str) -> 
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        json={
-            "model": model,
-            "input": build_openai_prompt(entries),
-            "max_output_tokens": 1400,
-        },
+        json=build_openai_request_payload(entries, model),
         timeout=60,
     )
     response.raise_for_status()
     text = extract_response_text(response.json())
     return text or build_fallback_digest(entries)
+
+
+def build_openai_request_payload(entries: list[dict[str, str]], model: str) -> dict[str, Any]:
+    return {
+        "model": model,
+        "input": build_openai_prompt(entries),
+        "max_output_tokens": OPENAI_MAX_OUTPUT_TOKENS,
+    }
 
 
 def split_telegram_message(text: str, limit: int = TELEGRAM_MESSAGE_LIMIT) -> list[str]:
