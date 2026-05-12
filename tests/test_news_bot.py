@@ -1,6 +1,4 @@
 from datetime import datetime, timezone
-import os
-import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -10,10 +8,7 @@ from news_bot import (
     build_openai_prompt,
     build_openai_request_payload,
     filter_entries_by_age,
-    filter_sent_entries,
     filter_entries,
-    load_sent_links,
-    remember_sent_entries,
     send_telegram_message,
     split_telegram_message,
     strip_markup,
@@ -121,16 +116,6 @@ class NewsBotTest(unittest.TestCase):
 
         self.assertEqual(result, entries)
 
-    def test_filter_sent_entries_removes_links_already_sent(self):
-        entries = [
-            {"title": "Old Codex item", "link": "https://example.com/old"},
-            {"title": "New Claude Code item", "link": "https://example.com/new"},
-        ]
-
-        result = filter_sent_entries(entries, ["https://example.com/old"])
-
-        self.assertEqual(result, [entries[1]])
-
     def test_filter_entries_by_age_keeps_recent_and_unknown_dates(self):
         entries = [
             {
@@ -157,27 +142,6 @@ class NewsBotTest(unittest.TestCase):
         )
 
         self.assertEqual(result, [entries[1], entries[2]])
-
-    def test_remember_sent_entries_persists_links(self):
-        entries = [
-            {"title": "Codex", "link": "https://example.com/codex"},
-            {"title": "Claude Code", "link": "https://example.com/claude-code"},
-        ]
-
-        with tempfile.TemporaryDirectory() as directory:
-            path = os.path.join(directory, "sent_links.json")
-            remember_sent_entries(path, ["https://example.com/existing"], entries)
-
-            links = load_sent_links(path)
-
-        self.assertEqual(
-            links,
-            [
-                "https://example.com/existing",
-                "https://example.com/codex",
-                "https://example.com/claude-code",
-            ],
-        )
 
     def test_build_fallback_digest_formats_chinese_daily_message(self):
         entries = [

@@ -18,7 +18,6 @@ import yaml
 DEFAULT_CONFIG_PATH = "sources.yaml"
 DEFAULT_MODEL = "gpt-5-mini"
 OPENAI_MAX_OUTPUT_TOKENS = 2200
-SENT_LINKS_LIMIT = 100
 TELEGRAM_MESSAGE_LIMIT = 4096
 
 
@@ -41,51 +40,6 @@ def strip_markup(value: str) -> str:
 def load_config(path: str = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
     with open(path, "r", encoding="utf-8") as file:
         return yaml.safe_load(file)
-
-
-def load_sent_links(path: str) -> list[str]:
-    if not path or not os.path.exists(path):
-        return []
-
-    with open(path, "r", encoding="utf-8") as file:
-        data = json.load(file)
-
-    if not isinstance(data, list):
-        return []
-    return [item for item in data if isinstance(item, str)]
-
-
-def save_sent_links(path: str, links: list[str]) -> None:
-    directory = os.path.dirname(path)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-
-    with open(path, "w", encoding="utf-8") as file:
-        json.dump(links[-SENT_LINKS_LIMIT:], file, ensure_ascii=False, indent=2)
-
-
-def filter_sent_entries(
-    entries: list[dict[str, str]], sent_links: list[str]
-) -> list[dict[str, str]]:
-    sent = set(sent_links)
-    return [entry for entry in entries if not entry.get("link") or entry.get("link") not in sent]
-
-
-def remember_sent_entries(
-    path: Optional[str], sent_links: list[str], entries: list[dict[str, str]]
-) -> None:
-    if not path:
-        return
-
-    updated = list(sent_links)
-    seen = set(updated)
-    for entry in entries:
-        link = entry.get("link")
-        if link and link not in seen:
-            updated.append(link)
-            seen.add(link)
-
-    save_sent_links(path, updated)
 
 
 def fetch_entries(sources: list[dict[str, str]], per_source_limit: int = 10) -> list[dict[str, str]]:
@@ -322,9 +276,6 @@ def run(config_path: str, dry_run: bool = False) -> str:
         config["keywords"],
         max_items=config.get("max_items", 8),
     )
-    sent_links_path = os.environ.get("SENT_LINKS_PATH")
-    sent_links = load_sent_links(sent_links_path) if sent_links_path else []
-    selected = filter_sent_entries(selected, sent_links)
 
     api_key = os.environ.get("OPENAI_API_KEY")
     model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
@@ -341,7 +292,6 @@ def run(config_path: str, dry_run: bool = False) -> str:
         bot_token = require_env("TELEGRAM_BOT_TOKEN")
         chat_id = require_env("TELEGRAM_CHAT_ID")
         send_telegram_message(bot_token, chat_id, message)
-        remember_sent_entries(sent_links_path, sent_links, selected)
 
     return message
 
