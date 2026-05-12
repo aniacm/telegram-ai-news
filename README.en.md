@@ -52,6 +52,7 @@ Edit `sources.yaml` to adjust:
 - `keywords`: filtering keywords.
 - `max_items`: maximum number of items in each digest.
 - `per_source_limit`: maximum number of entries to read from each feed.
+- `max_age_hours`: only keep entries published within this many hours. The default is 36 hours; entries without a publication time are kept conservatively.
 
 The current default sources come from the Feedly `Daily AI` OPML export:
 

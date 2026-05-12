@@ -2,9 +2,13 @@ name: Daily AI Coding News
 
 on:
   schedule:
-    # 01:00 UTC = 09:00 Asia/Shanghai
-    - cron: "0 1 * * *"
+    # 01:17 UTC = 09:17 Asia/Shanghai. Avoid the top-of-hour Actions queue.
+    - cron: "17 1 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: daily-ai-coding-news
+  cancel-in-progress: false
 
 jobs:
   send-digest:
@@ -20,6 +24,14 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Restore sent links
+        uses: actions/cache/restore@v5
+        with:
+          path: .cache/sent_links.json
+          key: sent-links-${{ github.run_id }}
+          restore-keys: |
+            sent-links-
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
@@ -27,6 +39,14 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-mini' }}
+          SENT_LINKS_PATH: .cache/sent_links.json
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python news_bot.py
+
+      - name: Save sent links
+        if: success()
+        uses: actions/cache/save@v5
+        with:
+          path: .cache/sent_links.json
+          key: sent-links-${{ github.run_id }}

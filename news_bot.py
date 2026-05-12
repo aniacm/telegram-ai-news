@@ -1,4 +1,5 @@
 import argparse
+from email.utils import parsedate_to_datetime
 import html
 from html.parser import HTMLParser
 import json
@@ -6,7 +7,8 @@ import os
 import re
 import sys
 from datetime import datetime, timezone
-from typing import Any
+from time import struct_time
+from typing import Any, Optional
 
 import feedparser
 import requests
@@ -16,6 +18,7 @@ import yaml
 DEFAULT_CONFIG_PATH = "sources.yaml"
 DEFAULT_MODEL = "gpt-5-mini"
 OPENAI_MAX_OUTPUT_TOKENS = 2200
+SENT_LINKS_LIMIT = 100
 TELEGRAM_MESSAGE_LIMIT = 4096
 
 
@@ -40,6 +43,51 @@ def load_config(path: str = DEFAULT_CONFIG_PATH) -> dict[str, Any]:
         return yaml.safe_load(file)
 
 
+def load_sent_links(path: str) -> list[str]:
+    if not path or not os.path.exists(path):
+        return []
+
+    with open(path, "r", encoding="utf-8") as file:
+        data = json.load(file)
+
+    if not isinstance(data, list):
+        return []
+    return [item for item in data if isinstance(item, str)]
+
+
+def save_sent_links(path: str, links: list[str]) -> None:
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(links[-SENT_LINKS_LIMIT:], file, ensure_ascii=False, indent=2)
+
+
+def filter_sent_entries(
+    entries: list[dict[str, str]], sent_links: list[str]
+) -> list[dict[str, str]]:
+    sent = set(sent_links)
+    return [entry for entry in entries if not entry.get("link") or entry.get("link") not in sent]
+
+
+def remember_sent_entries(
+    path: Optional[str], sent_links: list[str], entries: list[dict[str, str]]
+) -> None:
+    if not path:
+        return
+
+    updated = list(sent_links)
+    seen = set(updated)
+    for entry in entries:
+        link = entry.get("link")
+        if link and link not in seen:
+            updated.append(link)
+            seen.add(link)
+
+    save_sent_links(path, updated)
+
+
 def fetch_entries(sources: list[dict[str, str]], per_source_limit: int = 10) -> list[dict[str, str]]:
     entries: list[dict[str, str]] = []
     for source in sources:
@@ -58,9 +106,47 @@ def fetch_entries(sources: list[dict[str, str]], per_source_limit: int = 10) -> 
                     "link": item.get("link", "").strip(),
                     "source": source_name,
                     "published": item.get("published", ""),
+                    "published_parsed": item.get("published_parsed") or item.get("updated_parsed"),
                 }
             )
     return entries
+
+
+def filter_entries_by_age(
+    entries: list[dict[str, Any]], max_age_hours: int, now: Optional[datetime] = None
+) -> list[dict[str, Any]]:
+    current_time = now or datetime.now(timezone.utc)
+    filtered = []
+    for entry in entries:
+        published_at = parse_entry_datetime(entry)
+        if not published_at:
+            filtered.append(entry)
+            continue
+
+        age_seconds = (current_time - published_at).total_seconds()
+        if 0 <= age_seconds <= max_age_hours * 60 * 60:
+            filtered.append(entry)
+
+    return filtered
+
+
+def parse_entry_datetime(entry: dict[str, Any]) -> Optional[datetime]:
+    parsed = entry.get("published_parsed")
+    if isinstance(parsed, struct_time):
+        return datetime(*parsed[:6], tzinfo=timezone.utc)
+
+    published = entry.get("published")
+    if not published:
+        return None
+
+    try:
+        value = parsedate_to_datetime(published)
+    except (TypeError, ValueError):
+        return None
+
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def filter_entries(
@@ -230,11 +316,15 @@ def send_telegram_message(bot_token: str, chat_id: str, text: str) -> None:
 def run(config_path: str, dry_run: bool = False) -> str:
     config = load_config(config_path)
     entries = fetch_entries(config["sources"], config.get("per_source_limit", 10))
+    entries = filter_entries_by_age(entries, config.get("max_age_hours", 36))
     selected = filter_entries(
         entries,
         config["keywords"],
         max_items=config.get("max_items", 8),
     )
+    sent_links_path = os.environ.get("SENT_LINKS_PATH")
+    sent_links = load_sent_links(sent_links_path) if sent_links_path else []
+    selected = filter_sent_entries(selected, sent_links)
 
     api_key = os.environ.get("OPENAI_API_KEY")
     model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
@@ -251,6 +341,7 @@ def run(config_path: str, dry_run: bool = False) -> str:
         bot_token = require_env("TELEGRAM_BOT_TOKEN")
         chat_id = require_env("TELEGRAM_CHAT_ID")
         send_telegram_message(bot_token, chat_id, message)
+        remember_sent_entries(sent_links_path, sent_links, selected)
 
     return message
 

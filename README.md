@@ -50,6 +50,7 @@ python news_bot.py
 - `keywords`：筛选关键词。
 - `max_items`：日报最多新闻条数。
 - `per_source_limit`：每个 RSS 源最多读取条数。
+- `max_age_hours`：只保留最近多少小时发布的条目，默认 36 小时；没有发布时间的 RSS 条目会保守保留。
 
 ## 获取 Telegram Chat ID
 

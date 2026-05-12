@@ -1,5 +1,6 @@
 max_items: 8
 per_source_limit: 10
+max_age_hours: 36
 
 keywords:
   - AI coding
