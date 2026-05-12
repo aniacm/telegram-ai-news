@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from news_bot import (
     build_fallback_digest,
+    build_openai_prompt,
     build_openai_request_payload,
     filter_entries_by_age,
     filter_sent_entries,
@@ -207,6 +208,13 @@ class NewsBotTest(unittest.TestCase):
         )
 
         self.assertGreaterEqual(payload["max_output_tokens"], 2200)
+
+    def test_build_openai_prompt_keeps_telegram_format_without_title_prefix(self):
+        prompt = build_openai_prompt(
+            [{"title": "Claude Code", "summary": "Prompt caching", "source": "Claude", "link": "x"}]
+        )
+
+        self.assertIn("不要使用“标题：”前缀", prompt)
 
     def test_split_telegram_message_keeps_chunks_under_limit(self):
         message = "标题\n\n" + "\n".join(f"{index}. {'x' * 900}" for index in range(1, 7))

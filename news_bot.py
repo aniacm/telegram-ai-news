@@ -226,7 +226,7 @@ def build_openai_prompt(entries: list[dict[str, str]]) -> str:
         "请根据下面的 RSS 条目生成一份中文 Telegram 日报。要求：\n"
         "1. 标题固定为“今日 AI 编程新闻”。\n"
         "2. 最多 8 条，优先选择 AI 编程、代码智能体、IDE、Copilot、Codex、Cursor、Claude Code、开发者工具相关内容。\n"
-        "3. 每条包含标题、2 句以内中文摘要、链接。\n"
+        "3. 每条格式为：序号. 原标题；下一行“摘要：...”；下一行“链接：...”。不要使用“标题：”前缀。\n"
         "4. 不要编造 RSS 中没有的信息。\n\n"
         f"RSS 条目 JSON：\n{json.dumps(compact_entries, ensure_ascii=False)}"
     )

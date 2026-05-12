@@ -45,8 +45,8 @@ sources:
     url: https://rss.beehiiv.com/feeds/2R3C6Bt5wj.xml
   - name: Latent Space
     url: https://www.latent.space/feed
-  - name: Claude Blog
-    url: https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_claude.xml
+  - name: InfoQ Claude News
+    url: https://feed.infoq.com/claude/news/
   - name: OpenAI News
     url: https://openai.com/news/rss.xml
   - name: Simon Willison
